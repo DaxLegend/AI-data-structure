@@ -400,7 +400,7 @@ public class PrefixScanBenchmarks
     [Benchmark]
     public int SortedSet_PrefixRange()
     {
-        string upperBound = GetPrefixUpperBound(_prefix) ?? string.MaxValue;
+        string upperBound = GetPrefixUpperBound(_prefix) ?? throw new InvalidOperationException("The benchmark prefix has no finite upper bound.");
         int count = 0;
         foreach (string key in _sortedSet.GetViewBetween(_prefix, upperBound))
             if (key.StartsWith(_prefix, StringComparison.Ordinal))
