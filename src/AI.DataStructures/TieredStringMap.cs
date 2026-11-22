@@ -249,7 +249,14 @@ public sealed class TieredStringMap<TValue> where TValue : unmanaged
     }
 
     public int Count => Volatile.Read(ref _count);
-    public int PendingWrites => Volatile.Read(ref Volatile.Read(ref _snapshot).Active.Writes);
+    public int PendingWrites
+    {
+        get
+        {
+            Snapshot snapshot = Volatile.Read(ref _snapshot);
+            return Volatile.Read(ref snapshot.Active.Writes);
+        }
+    }
     public long BaseSizeInBytes => Volatile.Read(ref _snapshot).Base.SizeInBytes;
     public Exception? LastCompactionError => Volatile.Read(ref _lastCompactionError);
 
