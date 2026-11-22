@@ -78,10 +78,10 @@ Let N be base entries, S sealed layers, Dᵢ entries in sealed layer i, A active
 | Base exact lookup | Expected O(L + 1), worst O(L + N) | Hash plus linear probing and candidate byte comparisons |
 | Full exact lookup | Expected O((S + 1)L), plus active lookup | Newest layer wins; sealed Bloom filters skip definite misses |
 | UTF-8 base lookup | Same as base lookup | No UTF-16 decoding or key allocation |
-| UTF-8 lookup with deltas | O(L) decode plus layer lookups | Delta keys are currently strings |
-| Set / TryAdd / Remove | Expected O(L) | Writer gate serializes mutations |
+| UTF-8 lookup with deltas | O(L) decode plus O((S + 1)L) layer probes | Delta keys are currently strings; the immutable base still receives the original UTF-8 bytes |
+| Set / TryAdd / Remove | Expected O((S + 1)L) | Existence check consults active/sealed layers before writing; writer gate serializes mutations |
 | Prefix scan, base only | O(L log N + R) | Binary search in sorted ordinals, then sequential scan |
-| Prefix scan with deltas | O(L log N + R + U log U) | Matching delta keys are materialized and sorted before merge |
+| Prefix scan with deltas | O((A + sum(Dᵢ))L + U log U + R) | Current implementation scans each delta in full, UTF-8 encodes keys to filter the prefix, then sorts U matches |
 | Seal active layer | O(A) | Build immutable Bloom filter and publish new generation |
 | Compaction | O(K log K + B) | K distinct candidate keys; B total UTF-8 bytes copied into new base |
 | Base memory | O(B + N) | Packed bytes, metadata, values, hash slots, sorted ordinals |
