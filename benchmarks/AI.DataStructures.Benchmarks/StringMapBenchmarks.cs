@@ -33,7 +33,7 @@ public class StringMapBenchmarks
         Shuffle(_keys, seed: 1729);
 
         _missingKeys = _keys.Select(static key => "x" + key[1..]).ToArray();
-        _utf8Keys = _keys.Select(Encoding.UTF8.GetBytes).ToArray();
+        _utf8Keys = _keys.Select(static key => Encoding.UTF8.GetBytes(key)).ToArray();
         _zipfQueries = GenerateZipfianQueries(_keys, Math.Max(KeyCount, 100_000), seed: 4242);
 
         var initial = new KeyValuePair<string, int>[KeyCount];
