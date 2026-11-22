@@ -138,15 +138,9 @@ Design influences: Wirth (simplicity), Sedgewick and Knuth (algorithmic analysis
 
 ## Benchmarking
 
-Run the BenchmarkDotNet project in Release mode:
+A BenchmarkDotNet project is not included yet. Before making performance claims, add benchmarks comparing exact lookup and prefix enumeration against Dictionary, ConcurrentDictionary, FrozenDictionary, SortedDictionary, and (where relevant) a radix-tree implementation.
 
-~~~bash
-dotnet run -c Release --project benchmarks/AI.DataStructures.Benchmarks
-~~~
-
-The harness compares exact lookups against Dictionary, ConcurrentDictionary, and FrozenDictionary and reports allocation data. Add representative workload tests for uniform and Zipfian keys, hit/miss ratios, prefix lengths, key sizes, read/write ratios, and concurrent readers/writers.
-
-No benchmark numbers are embedded here; they must be generated on the target machine and runtime.
+Use uniform and Zipfian key distributions, hit/miss ratios, several key lengths, prefix lengths, read/write ratios, and concurrent readers/writers. Record CPU, memory, OS, .NET runtime, GC mode, and BenchmarkDotNet version. No benchmark numbers are embedded here because none have been measured for this implementation.
 
 ## Build and self-test
 
