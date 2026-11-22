@@ -152,6 +152,12 @@ For a quicker development run:
 dotnet run -c Release --project benchmarks/AI.DataStructures.Benchmarks/AI.DataStructures.Benchmarks.csproj -- --job short
 ~~~
 
+Run the separate retained-memory estimate (200,000 representative URL-like keys):
+
+~~~bash
+dotnet run -c Release --project benchmarks/AI.DataStructures.Benchmarks/AI.DataStructures.Benchmarks.csproj -- --memory-report
+~~~
+
 The benchmark suite separates two different questions:
 
 - **Exact lookup:** compares `Dictionary`, `FrozenDictionary`, and `TieredStringMap` for hits and same-length misses. Query keys are shuffled with a fixed seed so runs use a repeatable non-insertion order. It also measures the UTF-8 lookup API separately.
@@ -183,4 +189,4 @@ dotnet run -c Release --project tests/AI.DataStructures.SelfTest/AI.DataStructur
 
 ## License
 
-No license has been added. Do not assume redistribution rights until a license is explicitly selected.
+This project is distributed under the [MIT License](LICENSE).
