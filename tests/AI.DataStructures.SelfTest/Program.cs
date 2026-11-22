@@ -68,11 +68,12 @@ foreach (string prefix in new[] { "", "a", "é", "中", "😀", "ab" })
 
 // Prefix enumeration must merge base entries with active-delta inserts, updates, and tombstones.
 var prefixDeltaMap = new TieredStringMap<int>(
-[
+new[]
+{
     new KeyValuePair<string, int>("a/1", 1),
     new KeyValuePair<string, int>("a/3", 3),
     new KeyValuePair<string, int>("b/1", 10)
-], autoCompact: false);
+}, autoCompact: false);
 prefixDeltaMap.TryAdd("a/2", 2);
 prefixDeltaMap.Set("a/3", 33);
 prefixDeltaMap.Remove("a/1");
