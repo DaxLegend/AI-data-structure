@@ -22,9 +22,6 @@ public class StringMapBenchmarks
     private Dictionary<string, int> _dictionary = new(StringComparer.Ordinal);
     private FrozenDictionary<string, int> _frozenDictionary = null!;
     private TieredStringMap<int> _tieredStringMap = null!;
-    private TieredStringMap<int> _tieredStringMapWithDelta = null!;
-    private string[] _baseKeys = [];
-    private string[] _deltaKeys = [];
 
     [Params(10_000, 200_000)]
     public int KeyCount { get; set; }
@@ -50,18 +47,8 @@ public class StringMapBenchmarks
         _frozenDictionary = _dictionary.ToFrozenDictionary(StringComparer.Ordinal);
         _tieredStringMap = new TieredStringMap<int>(initial, autoCompact: false);
 
-        int baseCount = KeyCount / 2;
-        _baseKeys = _keys.Take(baseCount).ToArray();
-        _deltaKeys = _keys.Skip(baseCount).ToArray();
-        var baseEntries = initial.Take(baseCount).ToArray();
-        _tieredStringMapWithDelta = new TieredStringMap<int>(baseEntries, autoCompact: false);
-        foreach (var pair in initial.Skip(baseCount))
-            _tieredStringMapWithDelta.TryAdd(pair.Key, pair.Value);
-
         if (_tieredStringMap.PendingWrites != 0)
             throw new InvalidOperationException("The base-only benchmark must not contain active writes.");
-        if (_tieredStringMapWithDelta.PendingWrites != _deltaKeys.Length)
-            throw new InvalidOperationException("The base-plus-active-delta benchmark was not initialized as expected.");
     }
 
     [Benchmark(Baseline = true)]
@@ -100,26 +87,6 @@ public class StringMapBenchmarks
         int total = 0;
         foreach (byte[] key in _utf8Keys)
             if (_tieredStringMap.TryGetValueUtf8(key, out int value))
-                total += value;
-        return total;
-    }
-
-    [Benchmark]
-    public int TieredStringMap_HitBaseOnly()
-    {
-        int total = 0;
-        foreach (string key in _baseKeys)
-            if (_tieredStringMapWithDelta.TryGetValue(key.AsSpan(), out int value))
-                total += value;
-        return total;
-    }
-
-    [Benchmark]
-    public int TieredStringMap_HitActiveDelta()
-    {
-        int total = 0;
-        foreach (string key in _deltaKeys)
-            if (_tieredStringMapWithDelta.TryGetValue(key.AsSpan(), out int value))
                 total += value;
         return total;
     }
@@ -222,6 +189,113 @@ public class StringMapBenchmarks
             queries[i] = keys[index];
         }
         return queries;
+    }
+
+    private static void Shuffle<T>(T[] items, int seed)
+    {
+        var random = new Random(seed);
+        for (int i = items.Length - 1; i > 0; i--)
+        {
+            int j = random.Next(i + 1);
+            (items[i], items[j]) = (items[j], items[i]);
+        }
+    }
+}
+
+/// <summary>
+/// Compares base hits and active-delta hits with dictionary lookups over identical query counts.
+/// </summary>
+[MemoryDiagnoser]
+public class ActiveDeltaLookupBenchmarks
+{
+    private string[] _baseKeys = [];
+    private string[] _deltaKeys = [];
+    private Dictionary<string, int> _dictionary = new(StringComparer.Ordinal);
+    private TieredStringMap<int> _tieredStringMap = null!;
+
+    [Params(10_000, 200_000)]
+    public int KeyCount { get; set; }
+
+    [GlobalSetup]
+    public void Setup()
+    {
+        string[] keys = GenerateKeys(KeyCount);
+        Shuffle(keys, seed: 1729);
+        int baseCount = KeyCount / 2;
+        _baseKeys = keys.Take(baseCount).ToArray();
+        _deltaKeys = keys.Skip(baseCount).ToArray();
+
+        var baseEntries = new KeyValuePair<string, int>[baseCount];
+        for (int i = 0; i < keys.Length; i++)
+        {
+            int value = i;
+            _dictionary.Add(keys[i], value);
+            if (i < baseCount)
+                baseEntries[i] = new KeyValuePair<string, int>(keys[i], value);
+        }
+
+        _tieredStringMap = new TieredStringMap<int>(baseEntries, autoCompact: false);
+        for (int i = baseCount; i < keys.Length; i++)
+            _tieredStringMap.TryAdd(keys[i], i);
+
+        if (_tieredStringMap.PendingWrites != _deltaKeys.Length)
+            throw new InvalidOperationException("Expected all second-half keys in the active delta.");
+    }
+
+    [Benchmark(Baseline = true)]
+    public int Dictionary_HitBase()
+    {
+        int total = 0;
+        foreach (string key in _baseKeys)
+            if (_dictionary.TryGetValue(key, out int value))
+                total += value;
+        return total;
+    }
+
+    [Benchmark]
+    public int TieredStringMap_HitBase()
+    {
+        int total = 0;
+        foreach (string key in _baseKeys)
+            if (_tieredStringMap.TryGetValue(key.AsSpan(), out int value))
+                total += value;
+        return total;
+    }
+
+    [Benchmark]
+    public int Dictionary_HitActiveDelta()
+    {
+        int total = 0;
+        foreach (string key in _deltaKeys)
+            if (_dictionary.TryGetValue(key, out int value))
+                total += value;
+        return total;
+    }
+
+    [Benchmark]
+    public int TieredStringMap_HitActiveDelta()
+    {
+        int total = 0;
+        foreach (string key in _deltaKeys)
+            if (_tieredStringMap.TryGetValue(key.AsSpan(), out int value))
+                total += value;
+        return total;
+    }
+
+    private static string[] GenerateKeys(int count)
+    {
+        var keys = new string[count];
+        for (int i = 0; i < count; i++)
+        {
+            string id = i.ToString("D8", CultureInfo.InvariantCulture);
+            keys[i] = (i % 3) switch
+            {
+                0 => $"https://api.example.test/v1/customers/{id}",
+                1 => $"customer:{i:D8}-0000-0000-0000-{i:D12}",
+                _ => $"tenant/{i % 97:D2}/orders/{id}/line-items"
+            };
+        }
+        return keys;
     }
 
     private static void Shuffle<T>(T[] items, int seed)
