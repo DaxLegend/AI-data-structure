@@ -34,8 +34,10 @@ public sealed class TieredStringMap<TValue> where TValue : unmanaged
 
         public void Add(string key, Entry entry)
         {
+            // Publish the non-empty state before the dictionary write. Readers may
+            // skip the active layer only while Writes is still observed as zero.
+            Interlocked.Increment(ref Writes);
             Entries[key] = entry;
-            Writes++;
         }
 
         public void Seal()
@@ -247,7 +249,7 @@ public sealed class TieredStringMap<TValue> where TValue : unmanaged
     }
 
     public int Count => Volatile.Read(ref _count);
-    public int PendingWrites => Volatile.Read(ref _snapshot).Active.Writes;
+    public int PendingWrites => Volatile.Read(ref Volatile.Read(ref _snapshot).Active.Writes);
     public long BaseSizeInBytes => Volatile.Read(ref _snapshot).Base.SizeInBytes;
     public Exception? LastCompactionError => Volatile.Read(ref _lastCompactionError);
 
@@ -263,6 +265,8 @@ public sealed class TieredStringMap<TValue> where TValue : unmanaged
                 Span<byte> utf8 = stackalloc byte[maxByteCount];
                 int written = StrictUtf8.GetBytes(key, utf8);
                 ReadOnlySpan<byte> encodedKey = utf8[..written];
+                if (snapshot.Sealed.Length == 0 && Volatile.Read(ref snapshot.Active.Writes) == 0)
+                    return snapshot.Base.TryGetValue(encodedKey, out value);
                 if (TryGetFromLayers(snapshot, key, encodedKey, out Entry entry))
                 {
                     value = entry.Value;
@@ -276,6 +280,8 @@ public sealed class TieredStringMap<TValue> where TValue : unmanaged
             {
                 int written = StrictUtf8.GetBytes(key, rented);
                 ReadOnlySpan<byte> encodedKey = rented.AsSpan(0, written);
+                if (snapshot.Sealed.Length == 0 && Volatile.Read(ref snapshot.Active.Writes) == 0)
+                    return snapshot.Base.TryGetValue(encodedKey, out value);
                 if (TryGetFromLayers(snapshot, key, encodedKey, out Entry entry))
                 {
                     value = entry.Value;
@@ -298,6 +304,8 @@ public sealed class TieredStringMap<TValue> where TValue : unmanaged
     public bool TryGetValueUtf8(ReadOnlySpan<byte> key, out TValue value)
     {
         Snapshot snapshot = Volatile.Read(ref _snapshot);
+        if (snapshot.Sealed.Length == 0 && Volatile.Read(ref snapshot.Active.Writes) == 0)
+            return snapshot.Base.TryGetValue(key, out value);
         if (TryGetFromLayersUtf8(snapshot, key, out Entry entry))
         {
             value = entry.Value;
@@ -427,7 +435,8 @@ public sealed class TieredStringMap<TValue> where TValue : unmanaged
     }
 
     private bool ShouldCompact(Layer active) =>
-        _autoCompact && active.Writes >= _compactThreshold && Volatile.Read(ref _compacting) == 0;
+        _autoCompact && Volatile.Read(ref active.Writes) >= _compactThreshold &&
+        Volatile.Read(ref _compacting) == 0;
 
     private static void ValidateKey(string key)
     {
