@@ -16,5 +16,7 @@ jobs:
           dotnet-version: 10.0.x
       - name: Build library
         run: dotnet build -c Release src/AI.DataStructures/AI.DataStructures.csproj
+      - name: Build benchmarks
+        run: dotnet build -c Release benchmarks/AI.DataStructures.Benchmarks/AI.DataStructures.Benchmarks.csproj
       - name: Run differential self-test
         run: dotnet run -c Release --project tests/AI.DataStructures.SelfTest/AI.DataStructures.SelfTest.csproj
