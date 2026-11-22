@@ -160,14 +160,14 @@ dotnet run -c Release --project benchmarks/AI.DataStructures.Benchmarks/AI.DataS
 
 The benchmark suite separates two different questions:
 
-- **Exact lookup:** compares `Dictionary`, `FrozenDictionary`, and `TieredStringMap` for hits and same-length misses. Query keys are shuffled with a fixed seed so runs use a repeatable non-insertion order. It also measures the UTF-8 lookup API separately.
+- **Exact lookup:** compares `Dictionary`, `FrozenDictionary`, and `TieredStringMap` for hits and same-length misses. Query keys use URL-like, GUID-shaped, and hierarchical text formats. Uniform queries are shuffled with a fixed seed, and a separate Zipfian workload models skewed popularity. It also measures the UTF-8 lookup API separately.
 - **Prefix enumeration:** calls the actual `ForEachWithPrefix` API and compares it with full key scans in `Dictionary`, `FrozenDictionary`, and `SortedDictionary`. The number of matching keys is controlled independently from the total key count.
 
 TieredStringMap lookup benchmarks include both a **base-only** instance (constructed from initial entries with automatic compaction disabled) and a **base plus active delta** instance. Prefix benchmarks also include a base-plus-active-delta case. This avoids depending on the timing of background compaction during benchmark setup.
 
 Benchmark results are recorded in [RESULTS.md](RESULTS.md). Short jobs are useful for iteration but are not sufficient for strong performance claims. Use the default BenchmarkDotNet job for more reliable measurements, and record the hardware, OS, runtime, GC mode, and BenchmarkDotNet version alongside results.
 
-The current suite is a controlled starting point, not a complete workload model. Further work should add Zipfian access distributions, realistic URL/GUID/text keys, mixed read/write workloads, concurrent readers and writers, sealed-layer scenarios, and retained-memory measurements. Do not infer retained memory from the per-operation allocation column alone.
+The current suite is a controlled starting point, not a complete workload model. Further work should add mixed read/write workloads, concurrent reader/writer benchmarks, sealed-layer scenarios, and more representative retained-memory profiling. The current retained-memory command is an approximate diagnostic based on forced full collections, not a precise object-layout measurement. Do not infer retained memory from the per-operation allocation column alone.
 
 ## Build and self-test
 
