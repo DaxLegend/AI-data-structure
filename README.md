@@ -144,6 +144,24 @@ Every BenchmarkDotNet run now mirrors the complete console output to a timestamp
 
 BenchmarkDotNet also generates its normal structured reports (Markdown, CSV, and HTML) under `BenchmarkDotNet.Artifacts/results/`. Use those for comparing summary statistics, and the console log when the full execution trace is needed.
 
+### Reference environment
+
+The local benchmark runs documented in [RESULTS.md](RESULTS.md) were executed on the following workstation:
+
+| Component | Environment |
+|---|---|
+| Operating system | Linux — Zorin OS 18.1 |
+| CPU | Intel Core i7-4790 @ 3.60 GHz (Haswell) |
+| CPU topology | 4 physical cores, 8 logical processors |
+| .NET SDK | 10.0.115 |
+| .NET runtime | 10.0.15 |
+| JIT / architecture | RyuJIT x64, x86-64-v3 |
+| Garbage collector | Concurrent Workstation GC |
+| BenchmarkDotNet | 0.15.8 |
+| Build configuration | Release |
+
+These details are reported by BenchmarkDotNet on the machine used for the local runs. Results are hardware- and runtime-dependent: compare them with results from other machines only after accounting for the environment and benchmark configuration.
+
 Run the complete benchmark suite in Release mode:
 
 ~~~bash
