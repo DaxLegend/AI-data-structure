@@ -34,7 +34,7 @@ public class StringMapBenchmarks
 
         _missingKeys = _keys.Select(static key => "x" + key[1..]).ToArray();
         _utf8Keys = _keys.Select(static key => Encoding.UTF8.GetBytes(key)).ToArray();
-        _zipfQueries = GenerateZipfianQueries(_keys, Math.Max(KeyCount, 100_000), seed: 4242);
+        _zipfQueries = GenerateZipfianQueries(_keys, KeyCount, seed: 4242);
 
         var initial = new KeyValuePair<string, int>[KeyCount];
         for (int i = 0; i < _keys.Length; i++)
