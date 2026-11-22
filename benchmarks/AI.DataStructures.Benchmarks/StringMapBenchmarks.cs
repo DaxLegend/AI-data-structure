@@ -1,20 +1,25 @@
 using System.Collections.Frozen;
+using System.Globalization;
 using BenchmarkDotNet.Attributes;
 using BenchmarkDotNet.Running;
 using DataStructures;
 
 namespace AI.DataStructures.Benchmarks;
 
+/// <summary>
+/// Exact lookups against a base-only TieredStringMap. The map is constructed from
+/// its initial data so the benchmark does not depend on background compaction timing.
+/// </summary>
 [MemoryDiagnoser]
 public class StringMapBenchmarks
 {
     private string[] _keys = [];
     private string[] _missingKeys = [];
-    private string[] _prefixes = [];
+    private byte[][] _utf8Keys = [];
 
-    private Dictionary<string, int> _dictionary = new();
+    private Dictionary<string, int> _dictionary = new(StringComparer.Ordinal);
     private FrozenDictionary<string, int> _frozenDictionary = null!;
-    private TieredStringMap<int> _tieredStringMap = new();
+    private TieredStringMap<int> _tieredStringMap = null!;
 
     [Params(10_000, 200_000)]
     public int KeyCount { get; set; }
@@ -23,203 +28,196 @@ public class StringMapBenchmarks
     public void Setup()
     {
         _keys = GenerateKeys(KeyCount);
-        _missingKeys = GenerateNearMissKeys(KeyCount);
-        _prefixes = GeneratePrefixes(KeyCount);
+        Shuffle(_keys, seed: 1729);
 
-        foreach (var key in _keys)
+        _missingKeys = _keys.Select(static key => "x" + key[1..]).ToArray();
+        _utf8Keys = _keys.Select(Encoding.UTF8.GetBytes).ToArray();
+
+        var initial = new KeyValuePair<string, int>[KeyCount];
+        for (int i = 0; i < _keys.Length; i++)
         {
-            _dictionary[key] = key.GetHashCode();
+            int value = _keys[i].GetHashCode(StringComparison.Ordinal);
+            _dictionary.Add(_keys[i], value);
+            initial[i] = new KeyValuePair<string, int>(_keys[i], value);
         }
 
-        _frozenDictionary = _dictionary.ToFrozenDictionary();
+        _frozenDictionary = _dictionary.ToFrozenDictionary(StringComparer.Ordinal);
+        _tieredStringMap = new TieredStringMap<int>(initial, autoCompact: false);
 
-        foreach (var key in _keys)
-        {
-            if (!_tieredStringMap.TryAdd(key, key.GetHashCode()))
-            {
-                throw new InvalidOperationException($"Unable to add key: {key}");
-            }
-        }
+        if (_tieredStringMap.PendingWrites != 0)
+            throw new InvalidOperationException("The base-only benchmark must not contain active writes.");
     }
 
     [Benchmark(Baseline = true)]
     public int Dictionary_HitUniform()
     {
-        var total = 0;
-
-        for (var i = 0; i < _keys.Length; i++)
-        {
-            if (_dictionary.TryGetValue(_keys[i], out var value))
-            {
+        int total = 0;
+        foreach (string key in _keys)
+            if (_dictionary.TryGetValue(key, out int value))
                 total += value;
-            }
-        }
-
         return total;
     }
 
     [Benchmark]
     public int FrozenDictionary_HitUniform()
     {
-        var total = 0;
-
-        for (var i = 0; i < _keys.Length; i++)
-        {
-            if (_frozenDictionary.TryGetValue(_keys[i], out var value))
-            {
+        int total = 0;
+        foreach (string key in _keys)
+            if (_frozenDictionary.TryGetValue(key, out int value))
                 total += value;
-            }
-        }
-
         return total;
     }
 
     [Benchmark]
     public int TieredStringMap_HitUniform()
     {
-        var total = 0;
-
-        for (var i = 0; i < _keys.Length; i++)
-        {
-            if (_tieredStringMap.TryGetValue(_keys[i].AsSpan(), out var value))
-            {
+        int total = 0;
+        foreach (string key in _keys)
+            if (_tieredStringMap.TryGetValue(key.AsSpan(), out int value))
                 total += value;
-            }
-        }
-
         return total;
     }
 
     [Benchmark]
-    public int Dictionary_MissNear()
+    public int TieredStringMap_HitUniform_Utf8()
     {
-        var total = 0;
-
-        for (var i = 0; i < _missingKeys.Length; i++)
-        {
-            if (_dictionary.TryGetValue(_missingKeys[i], out var value))
-            {
+        int total = 0;
+        foreach (byte[] key in _utf8Keys)
+            if (_tieredStringMap.TryGetValueUtf8(key, out int value))
                 total += value;
-            }
-        }
-
         return total;
     }
 
     [Benchmark]
-    public int FrozenDictionary_MissNear()
+    public int Dictionary_MissSameLength()
     {
-        var total = 0;
-
-        for (var i = 0; i < _missingKeys.Length; i++)
-        {
-            if (_frozenDictionary.TryGetValue(_missingKeys[i], out var value))
-            {
+        int total = 0;
+        foreach (string key in _missingKeys)
+            if (_dictionary.TryGetValue(key, out int value))
                 total += value;
-            }
-        }
-
         return total;
     }
 
     [Benchmark]
-    public int TieredStringMap_MissNear()
+    public int FrozenDictionary_MissSameLength()
     {
-        var total = 0;
-
-        for (var i = 0; i < _missingKeys.Length; i++)
-        {
-            if (_tieredStringMap.TryGetValue(_missingKeys[i].AsSpan(), out var value))
-            {
+        int total = 0;
+        foreach (string key in _missingKeys)
+            if (_frozenDictionary.TryGetValue(key, out int value))
                 total += value;
-            }
-        }
-
         return total;
     }
 
     [Benchmark]
-    public int Dictionary_Prefix()
+    public int TieredStringMap_MissSameLength()
     {
-        var total = 0;
-
-        for (var i = 0; i < _prefixes.Length; i++)
-        {
-            if (_dictionary.TryGetValue(_prefixes[i], out var value))
-            {
+        int total = 0;
+        foreach (string key in _missingKeys)
+            if (_tieredStringMap.TryGetValue(key.AsSpan(), out int value))
                 total += value;
-            }
-        }
-
-        return total;
-    }
-
-    [Benchmark]
-    public int FrozenDictionary_Prefix()
-    {
-        var total = 0;
-
-        for (var i = 0; i < _prefixes.Length; i++)
-        {
-            if (_frozenDictionary.TryGetValue(_prefixes[i], out var value))
-            {
-                total += value;
-            }
-        }
-
-        return total;
-    }
-
-    [Benchmark]
-    public int TieredStringMap_Prefix()
-    {
-        var total = 0;
-
-        for (var i = 0; i < _prefixes.Length; i++)
-        {
-            if (_tieredStringMap.TryGetValue(_prefixes[i].AsSpan(), out var value))
-            {
-                total += value;
-            }
-        }
-
         return total;
     }
 
     private static string[] GenerateKeys(int count)
     {
         var keys = new string[count];
-
-        for (var i = 0; i < count; i++)
-        {
-            keys[i] = $"key:{i:D8}";
-        }
-
+        for (int i = 0; i < count; i++)
+            keys[i] = $"key:{i.ToString("D8", CultureInfo.InvariantCulture)}";
         return keys;
     }
 
-    private static string[] GenerateNearMissKeys(int count)
+    private static void Shuffle<T>(T[] items, int seed)
     {
-        var keys = new string[count];
-
-        for (var i = 0; i < count; i++)
+        var random = new Random(seed);
+        for (int i = items.Length - 1; i > 0; i--)
         {
-            keys[i] = $"key:{i:D8}x";
+            int j = random.Next(i + 1);
+            (items[i], items[j]) = (items[j], items[i]);
+        }
+    }
+}
+
+/// <summary>
+/// Measures actual ordered prefix enumeration, not exact lookups of absent strings.
+/// Each prefix matches exactly PrefixResultCount keys.
+/// </summary>
+[MemoryDiagnoser]
+public class PrefixScanBenchmarks
+{
+    private static readonly FrozenKeyVisitor<int> CountVisitor = static (_, _) => true;
+
+    private string _prefix = string.Empty;
+    private Dictionary<string, int> _dictionary = new(StringComparer.Ordinal);
+    private FrozenDictionary<string, int> _frozenDictionary = null!;
+    private SortedDictionary<string, int> _sortedDictionary = new(StringComparer.Ordinal);
+    private TieredStringMap<int> _tieredStringMap = null!;
+
+    [Params(10_000, 200_000)]
+    public int KeyCount { get; set; }
+
+    [Params(1, 100, 10_000)]
+    public int PrefixResultCount { get; set; }
+
+    [GlobalSetup]
+    public void Setup()
+    {
+        if (KeyCount % PrefixResultCount != 0)
+            throw new InvalidOperationException("KeyCount must be divisible by PrefixResultCount.");
+
+        var initial = new KeyValuePair<string, int>[KeyCount];
+        for (int i = 0; i < KeyCount; i++)
+        {
+            int group = i / PrefixResultCount;
+            string key = $"group:{group.ToString("D8", CultureInfo.InvariantCulture)}:item:{i.ToString("D8", CultureInfo.InvariantCulture)}";
+            int value = i;
+            _dictionary.Add(key, value);
+            _sortedDictionary.Add(key, value);
+            initial[i] = new KeyValuePair<string, int>(key, value);
         }
 
-        return keys;
+        _frozenDictionary = _dictionary.ToFrozenDictionary(StringComparer.Ordinal);
+        _tieredStringMap = new TieredStringMap<int>(initial, autoCompact: false);
+        _prefix = $"group:{0.ToString("D8", CultureInfo.InvariantCulture)}:";
+
+        int expected = _dictionary.Keys.Count(key => key.StartsWith(_prefix, StringComparison.Ordinal));
+        if (expected != PrefixResultCount)
+            throw new InvalidOperationException($"Expected {PrefixResultCount} prefix matches, found {expected}.");
     }
 
-    private static string[] GeneratePrefixes(int count)
+    [Benchmark(Baseline = true)]
+    public int Dictionary_PrefixScan()
     {
-        var keys = new string[count];
+        int count = 0;
+        foreach (string key in _dictionary.Keys)
+            if (key.StartsWith(_prefix, StringComparison.Ordinal))
+                count++;
+        return count;
+    }
 
-        for (var i = 0; i < count; i++)
-        {
-            keys[i] = $"key:{i:D4}";
-        }
+    [Benchmark]
+    public int FrozenDictionary_PrefixScan()
+    {
+        int count = 0;
+        foreach (string key in _frozenDictionary.Keys)
+            if (key.StartsWith(_prefix, StringComparison.Ordinal))
+                count++;
+        return count;
+    }
 
-        return keys;
+    [Benchmark]
+    public int SortedDictionary_PrefixScan()
+    {
+        int count = 0;
+        foreach (string key in _sortedDictionary.Keys)
+            if (key.StartsWith(_prefix, StringComparison.Ordinal))
+                count++;
+        return count;
+    }
+
+    [Benchmark]
+    public int TieredStringMap_PrefixScan()
+    {
+        return _tieredStringMap.ForEachWithPrefix(_prefix.AsSpan(), CountVisitor);
     }
 }
 
