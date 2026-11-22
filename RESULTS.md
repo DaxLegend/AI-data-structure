@@ -173,7 +173,7 @@ The revised harness separates the workloads:
 | Exact lookup – base only | Hits and same-length misses against a TieredStringMap constructed directly from initial entries |
 | Exact lookup – active delta | Hits resolved from the immutable base and from the active delta |
 | UTF-8 lookup | Exact hits through `TryGetValueUtf8` |
-| Prefix scan – base only | Actual ordered `ForEachWithPrefix` enumeration, compared with scans over Dictionary, FrozenDictionary, and SortedDictionary |
+| Prefix scan – base only | Actual ordered `ForEachWithPrefix` enumeration, compared with scans over Dictionary, FrozenDictionary, SortedDictionary, and SortedSet.GetViewBetween range views |
 | Prefix scan – active delta | Actual prefix enumeration when matching keys are split between the immutable base and active delta |
 
 Keys include URL-like, GUID-shaped, and hierarchical text forms. Uniform lookup keys are shuffled using a fixed seed, and a separate Zipfian workload models skewed popularity. Prefix result cardinality is controlled independently from total key count (1, 100, and 10,000 matches). A separate retained-memory diagnostic uses forced full collections and should be interpreted as an estimate, not an exact object-layout measurement.
