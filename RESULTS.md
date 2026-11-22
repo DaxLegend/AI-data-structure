@@ -59,3 +59,94 @@ IterationCount=3  LaunchCount=1  WarmupCount=3
 | Dictionary_Prefix           | 200000   |  5,890.01 μs |  4,721.029 μs |   258.776 μs |  1.36 |    0.06 |         - |          NA |
 | FrozenDictionary_Prefix     | 200000   |    622.84 μs |  1,376.718 μs |    75.463 μs |  0.14 |    0.02 |         - |          NA |
 | TieredStringMap_Prefix      | 200000   | 19,471.22 μs | 31,785.518 μs | 1,742.272 μs |  4.48 |    0.36 |         - |          NA |
+
+
+---
+---
+
+## Optimization Iteration 1 – Lookup and Prefix Hot Paths
+
+**Commit:** `f8d2f97`  
+**Changes:** Reduced temporary allocations and encoding overhead in lookup and prefix operations.
+
+The first optimization pass focused on reducing the overhead of UTF-8 conversions and prefix matching:
+
+- Introduced stack-allocated UTF-8 buffers for keys up to 256 bytes, with `ArrayPool<byte>` fallback for longer keys.
+- Optimized `PackedBase.TryGetValue` to avoid unnecessary heap allocations during key encoding.
+- Changed prefix matching in the active delta to use UTF-16 comparisons, avoiding repeated UTF-8 conversions for non-matching keys.
+- Preserved the existing lookup semantics and ordered prefix enumeration.
+
+### Benchmark environment
+
+- OS: Linux Zorin OS 18.1
+- CPU: Intel Core i7-4790 @ 3.60 GHz (Haswell)
+- Runtime: .NET 10.0.15
+- .NET SDK: 10.0.115
+- BenchmarkDotNet: 0.15.8
+- Configuration: Release
+- Benchmark job: short (3 iterations, 1 launch, 3 warmup iterations)
+
+### Results after optimization
+
+| Method | KeyCount | Mean | Ratio |
+|---|---:|---:|---:|
+| Dictionary_HitUniform | 10,000 | 110.22 μs | 1.00 |
+| FrozenDictionary_HitUniform | 10,000 | 118.74 μs | 1.08 |
+| TieredStringMap_HitUniform | 10,000 | 417.38 μs | 3.79 |
+| Dictionary_MissNear | 10,000 | 132.97 μs | 1.21 |
+| FrozenDictionary_MissNear | 10,000 | 16.13 μs | 0.15 |
+| TieredStringMap_MissNear | 10,000 | 498.08 μs | 4.52 |
+| Dictionary_Prefix | 10,000 | 90.71 μs | 0.82 |
+| FrozenDictionary_Prefix | 10,000 | 15.42 μs | 0.14 |
+| TieredStringMap_Prefix | 10,000 | 553.94 μs | 5.03 |
+| Dictionary_HitUniform | 200,000 | 3,767.28 μs | 1.00 |
+| FrozenDictionary_HitUniform | 200,000 | 7,433.32 μs | 1.97 |
+| TieredStringMap_HitUniform | 200,000 | 17,308.04 μs | 4.59 |
+| Dictionary_MissNear | 200,000 | 6,171.46 μs | 1.64 |
+| FrozenDictionary_MissNear | 200,000 | 718.30 μs | 0.19 |
+| TieredStringMap_MissNear | 200,000 | 18,144.58 μs | 4.82 |
+| Dictionary_Prefix | 200,000 | 5,267.77 μs | 1.40 |
+| FrozenDictionary_Prefix | 200,000 | 505.07 μs | 0.13 |
+| TieredStringMap_Prefix | 200,000 | 16,094.74 μs | 4.27 |
+
+*Ratio is relative to Dictionary for the corresponding key count and scenario. Lower values indicate better performance.*
+
+### Comparison with the initial baseline
+
+The following table compares the TieredStringMap results before and after the first optimization pass.
+
+| Scenario | Initial | Optimized | Improvement |
+|---|---:|---:|---:|
+| Hit – 10K | 536.17 μs | 417.38 μs | **22.2%** |
+| Miss – 10K | 615.72 μs | 498.08 μs | **19.1%** |
+| Prefix – 10K | 596.67 μs | 553.94 μs | **7.2%** |
+| Hit – 200K | 20,223.55 μs | 17,308.04 μs | **14.4%** |
+| Miss – 200K | 23,543.78 μs | 18,144.58 μs | **22.9%** |
+| Prefix – 200K | 19,471.22 μs | 16,094.74 μs | **17.3%** |
+
+### Analysis
+
+The first optimization pass produced measurable improvements across all tested scenarios, with gains ranging from 7.2% to 22.9%.
+
+However, TieredStringMap is still slower than the standard dictionary implementations in every tested scenario:
+
+- At 200K keys, exact lookups are approximately 4.6x slower than Dictionary.
+- Miss lookups are approximately 2.9x slower than Dictionary.
+- Prefix operations are approximately 3.1x slower than Dictionary and significantly slower than FrozenDictionary.
+
+The current results therefore confirm that the optimizations reduced overhead, but do not yet demonstrate a performance advantage over existing alternatives.
+
+### Limitations
+
+- The `short` benchmark job is useful for directional comparisons, not definitive performance conclusions.
+- Only three measurement iterations were collected.
+- The allocation column did not report usable allocation values (`-`).
+- FrozenDictionary is immutable, whereas TieredStringMap supports incremental updates and compaction. The comparison is therefore not fully equivalent in terms of capabilities.
+
+### Next steps
+
+1. Profile the lookup path to identify the main sources of overhead.
+2. Benchmark the base-only, active-delta, sealed-delta and post-compaction states separately.
+3. Improve allocation and memory diagnostics.
+4. Investigate whether the layered lookup architecture introduces excessive overhead.
+5. Identify workloads where incremental updates and prefix enumeration could provide a concrete advantage.
