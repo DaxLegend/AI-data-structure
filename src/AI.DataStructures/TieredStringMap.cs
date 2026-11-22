@@ -409,7 +409,7 @@ public sealed class TieredStringMap<TValue> where TValue : unmanaged
             if (TryGetLive(s, key.AsSpan(), out _)) return false;
             s.Active.Add(key, new Entry(value, false));
             Interlocked.Increment(ref _count);
-            compact = ShouldCompact(s.Active);
+            compact = ShouldCompact(s);
         }
         if (compact) _ = CompactAsync();
         return true;
@@ -425,7 +425,7 @@ public sealed class TieredStringMap<TValue> where TValue : unmanaged
             if (!TryGetLive(s, key.AsSpan(), out _)) return false;
             s.Active.Add(key, new Entry(default, true));
             Interlocked.Decrement(ref _count);
-            compact = ShouldCompact(s.Active);
+            compact = ShouldCompact(s);
         }
         if (compact) _ = CompactAsync();
         return true;
