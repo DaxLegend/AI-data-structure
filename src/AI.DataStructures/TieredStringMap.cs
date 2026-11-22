@@ -421,6 +421,9 @@ public sealed class TieredStringMap<TValue> where TValue : unmanaged
         finally { Volatile.Write(ref _compacting, 0); }
     }
 
+    public int ForEach(FrozenKeyVisitor<TValue> visitor) =>
+        ForEachWithPrefix(ReadOnlySpan<char>.Empty, visitor);
+
     public int ForEachWithPrefix(ReadOnlySpan<char> prefix, FrozenKeyVisitor<TValue> visitor)
     {
         ArgumentNullException.ThrowIfNull(visitor);
