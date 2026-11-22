@@ -1,0 +1,20 @@
+name: .NET
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  build-and-self-test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 10.0.x
+      - name: Build library
+        run: dotnet build -c Release src/AI.DataStructures/AI.DataStructures.csproj
+      - name: Run differential self-test
+        run: dotnet run -c Release --project tests/AI.DataStructures.SelfTest/AI.DataStructures.SelfTest.csproj
