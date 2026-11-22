@@ -145,8 +145,8 @@ Use uniform and Zipfian key distributions, hit/miss ratios, several key lengths,
 ## Build and self-test
 
 ~~~bash
-dotnet build -c Release
-dotnet run -c Release --project tests/AI.DataStructures.SelfTest
+dotnet build -c Release src/AI.DataStructures/AI.DataStructures.csproj
+dotnet run -c Release --project tests/AI.DataStructures.SelfTest/AI.DataStructures.SelfTest.csproj
 ~~~
 
 ## Limitations and roadmap
