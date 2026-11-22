@@ -446,6 +446,9 @@ public static class Program
             return;
         }
 
-        BenchmarkSwitcher.FromAssembly(typeof(StringMapBenchmarks).Assembly).Run(args);
+        BenchmarkConsoleLog.Run(() =>
+        {
+            BenchmarkSwitcher.FromAssembly(typeof(StringMapBenchmarks).Assembly).Run(args);
+        });
     }
 }
