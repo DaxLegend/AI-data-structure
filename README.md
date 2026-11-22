@@ -161,7 +161,7 @@ dotnet run -c Release --project benchmarks/AI.DataStructures.Benchmarks/AI.DataS
 The benchmark suite separates two different questions:
 
 - **Exact lookup:** compares `Dictionary`, `FrozenDictionary`, and `TieredStringMap` for hits and same-length misses. Query keys use URL-like, GUID-shaped, and hierarchical text formats. Uniform queries are shuffled with a fixed seed, and a separate Zipfian workload models skewed popularity. It also measures the UTF-8 lookup API separately.
-- **Prefix enumeration:** calls the actual `ForEachWithPrefix` API and compares it with full key scans in `Dictionary`, `FrozenDictionary`, and `SortedDictionary`. The number of matching keys is controlled independently from the total key count.
+- **Prefix enumeration:** calls the actual `ForEachWithPrefix` API and compares it with full key scans in `Dictionary`, `FrozenDictionary`, `SortedDictionary`, and `SortedSet.GetViewBetween` range views. The number of matching keys is controlled independently from the total key count.
 
 TieredStringMap lookup benchmarks include both a **base-only** instance (constructed from initial entries with automatic compaction disabled) and a **base plus active delta** instance. Prefix benchmarks also include a base-plus-active-delta case. This avoids depending on the timing of background compaction during benchmark setup.
 
