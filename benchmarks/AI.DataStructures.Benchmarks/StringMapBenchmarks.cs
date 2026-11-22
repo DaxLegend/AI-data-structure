@@ -185,6 +185,7 @@ public class PrefixScanBenchmarks
     private FrozenDictionary<string, int> _frozenDictionary = null!;
     private SortedDictionary<string, int> _sortedDictionary = new(StringComparer.Ordinal);
     private TieredStringMap<int> _tieredStringMap = null!;
+    private TieredStringMap<int> _tieredStringMapWithDelta = null!;
 
     [Params(10_000, 200_000)]
     public int KeyCount { get; set; }
@@ -199,18 +200,26 @@ public class PrefixScanBenchmarks
             throw new InvalidOperationException("KeyCount must be divisible by PrefixResultCount.");
 
         var initial = new KeyValuePair<string, int>[KeyCount];
+        var baseEntries = new List<KeyValuePair<string, int>>(KeyCount / 2);
+        var deltaEntries = new List<KeyValuePair<string, int>>(KeyCount / 2);
         for (int i = 0; i < KeyCount; i++)
         {
             int group = i / PrefixResultCount;
             string key = $"group:{group.ToString("D8", CultureInfo.InvariantCulture)}:item:{i.ToString("D8", CultureInfo.InvariantCulture)}";
             int value = i;
+            var pair = new KeyValuePair<string, int>(key, value);
             _dictionary.Add(key, value);
             _sortedDictionary.Add(key, value);
-            initial[i] = new KeyValuePair<string, int>(key, value);
+            initial[i] = pair;
+            if ((i & 1) == 0) baseEntries.Add(pair);
+            else deltaEntries.Add(pair);
         }
 
         _frozenDictionary = _dictionary.ToFrozenDictionary(StringComparer.Ordinal);
         _tieredStringMap = new TieredStringMap<int>(initial, autoCompact: false);
+        _tieredStringMapWithDelta = new TieredStringMap<int>(baseEntries, autoCompact: false);
+        foreach (var pair in deltaEntries)
+            _tieredStringMapWithDelta.TryAdd(pair.Key, pair.Value);
         _prefix = $"group:{0.ToString("D8", CultureInfo.InvariantCulture)}:";
 
         int expected = _dictionary.Keys.Count(key => key.StartsWith(_prefix, StringComparison.Ordinal));
@@ -252,6 +261,12 @@ public class PrefixScanBenchmarks
     public int TieredStringMap_PrefixScan()
     {
         return _tieredStringMap.ForEachWithPrefix(_prefix.AsSpan(), CountVisitor);
+    }
+
+    [Benchmark]
+    public int TieredStringMap_PrefixScan_WithActiveDelta()
+    {
+        return _tieredStringMapWithDelta.ForEachWithPrefix(_prefix.AsSpan(), CountVisitor);
     }
 }
 
