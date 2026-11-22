@@ -187,3 +187,45 @@ Keys include URL-like, GUID-shaped, and hierarchical text forms. Uniform lookup 
 - `MemoryDiagnoser` reports allocations performed during benchmark operations. It does not, by itself, measure the retained memory footprint of a populated data structure.
 
 No results from the revised harness are published yet. The next run will establish a new, controlled baseline.
+
+---
+---
+
+## Benchmark Run 2 — Corrected Lookup Workloads
+
+**Configuration:** BenchmarkDotNet ShortRun (3 iterations, 1 launch, 3 warmup iterations).
+
+**Environment:** Linux Zorin OS 18.1, Intel Core i7-4790, .NET 10.0.15.
+
+This run introduces corrected lookup workloads:
+- Same-length missing keys.
+- Fixed-seed uniform access.
+- Zipfian access distribution.
+- Direct UTF-8 lookup.
+
+### Results
+
+| Scenario | KeyCount | Dictionary | FrozenDictionary | TieredStringMap |
+|---|---:|---:|---:|---:|
+| Hit Uniform | 10,000 | 299.6 µs | 350.3 µs | 1,102.2 µs |
+| Hit Uniform | 200,000 | 21,167.7 µs | 27,036.6 µs | 77,819.8 µs |
+| Hit Zipfian | 10,000 | 326.6 µs | 294.6 µs | 974.3 µs |
+| Hit Zipfian | 200,000 | 30,886.5 µs | 27,205.5 µs | 57,280.0 µs |
+| Miss Same Length | 10,000 | 254.7 µs | 228.9 µs | 905.7 µs |
+| Miss Same Length | 200,000 | 29,848.0 µs | 26,623.9 µs | 29,346.9 µs |
+
+### Preliminary observations
+
+- Exact lookups remain significantly slower than Dictionary and FrozenDictionary.
+- Zipfian access reduces the relative performance gap at 200,000 keys, but does not eliminate it.
+- Same-length missing-key lookups at 200,000 keys are close to Dictionary performance.
+- Direct UTF-8 lookup does not yet demonstrate a consistent advantage over UTF-16 lookup.
+- ShortRun confidence intervals are too wide in several scenarios to support definitive performance conclusions.
+
+### Limitations
+
+This run does not establish an overall performance advantage.
+
+Prefix scans, isolated base/delta lookup performance, and retained-memory measurements must be evaluated separately before drawing conclusions about the architecture.
+
+The results are preliminary and should be confirmed using a longer BenchmarkDotNet job.
