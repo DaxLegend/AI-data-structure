@@ -72,7 +72,7 @@ IterationCount=3  LaunchCount=1  WarmupCount=3
 ---
 ---
 
-## Optimization Iteration 1 – Lookup and Prefix Hot Paths
+## Optimization Iteration 1 – Lookup and Prefix Hot Paths (22 November 2026)
 
 **Commit:** `f8d2f97`  
 **Changes:** Reduced temporary allocations and encoding overhead in lookup and prefix operations.
@@ -201,7 +201,7 @@ No results from the revised harness are published yet. The next run will establi
 ---
 ---
 
-## Benchmark Run 2 — Corrected Lookup Workloads
+## Benchmark Run 2 — Corrected Lookup Workloads (22 November 2026)
 
 **Configuration:** BenchmarkDotNet ShortRun (3 iterations, 1 launch, 3 warmup iterations).
 
