@@ -64,7 +64,7 @@ foreach (string prefix in new[] { "", "a", "é", "中", "😀", "ab" })
 }
 
 // Malformed UTF-16 lookup input must behave like an absent key, not throw.
-if (map.TryGetValue("\\uD800".AsSpan(), out _))
+if (map.TryGetValue("\uD800".AsSpan(), out _))
     throw new Exception("Malformed UTF-16 lookup unexpectedly matched a key.");
 
 // Concurrent writers are serialized internally; verify the resulting state after they finish.
