@@ -111,9 +111,9 @@ The first optimization pass focused on reducing the overhead of UTF-8 conversion
 
 *Ratio is relative to Dictionary for the corresponding key count and scenario. Lower values indicate better performance.*
 
-### Comparison with the initial baseline
+### Historical comparison with the initial baseline (not controlled)
 
-The following table compares the TieredStringMap results before and after the first optimization pass.
+The following table preserves the previously observed means before and after the first optimization pass. It is included for traceability only: both runs used a setup in which automatic compaction could overlap population, so the internal layer distribution was not controlled.
 
 | Scenario | Initial | Optimized | Improvement |
 |---|---:|---:|---:|
@@ -126,7 +126,7 @@ The following table compares the TieredStringMap results before and after the fi
 
 ### Analysis
 
-The first optimization pass produced measurable improvements across all tested scenarios, with gains ranging from 7.2% to 22.9%.
+The later run reported lower mean times in all six scenarios (7.2% to 22.9%). However, because the setup did not guarantee the same layer distribution and the short job used only three iterations, these differences are directional observations—not controlled evidence that the code changes caused the improvements.
 
 However, TieredStringMap is still slower than the standard dictionary implementations in every tested scenario:
 
@@ -134,7 +134,7 @@ However, TieredStringMap is still slower than the standard dictionary implementa
 - Miss lookups are approximately 2.9x slower than Dictionary.
 - Prefix operations are approximately 3.1x slower than Dictionary and significantly slower than FrozenDictionary.
 
-The current results therefore confirm that the optimizations reduced overhead, but do not yet demonstrate a performance advantage over existing alternatives.
+The historical results are consistent with reduced overhead, but do not establish causation and do not demonstrate a performance advantage over existing alternatives.
 
 ### Limitations
 
@@ -150,3 +150,40 @@ The current results therefore confirm that the optimizations reduced overhead, b
 3. Improve allocation and memory diagnostics.
 4. Investigate whether the layered lookup architecture introduces excessive overhead.
 5. Identify workloads where incremental updates and prefix enumeration could provide a concrete advantage.
+
+---
+
+## Benchmark Methodology Revision
+
+The benchmark harness has been revised because code review identified limitations in the original scenarios. The historical measurements above are retained for traceability, but **must not be treated as directly comparable with results produced by the revised harness**.
+
+### Issues identified in the historical harness
+
+- **TieredStringMap setup was nondeterministic:** entries were inserted one at a time with automatic compaction enabled. Background compaction could overlap setup, leaving keys distributed across the base, sealed layers, and active delta depending on scheduling.
+- **The `Prefix` scenario was mislabeled:** it called `TryGetValue` with shorter, absent strings. It measured unsuccessful exact lookups, not ordered prefix enumeration.
+- **The `MissNear` keys had a different length:** the missing keys were one character longer than stored keys. This could allow implementations such as `FrozenDictionary` to reject them using length metadata before performing a full hash lookup.
+- **Access order followed insertion order:** this was not representative of a shuffled lookup workload.
+
+### Revised benchmark coverage
+
+The revised harness separates the workloads:
+
+| Benchmark group | What it measures |
+|---|---|
+| Exact lookup – base only | Hits and same-length misses against a TieredStringMap constructed directly from initial entries |
+| Exact lookup – active delta | Hits resolved from the immutable base and from the active delta |
+| UTF-8 lookup | Exact hits through `TryGetValueUtf8` |
+| Prefix scan – base only | Actual ordered `ForEachWithPrefix` enumeration, compared with scans over Dictionary, FrozenDictionary, SortedDictionary, and SortedSet.GetViewBetween range views |
+| Prefix scan – active delta | Actual prefix enumeration when matching keys are split between the immutable base and active delta |
+
+Keys include URL-like, GUID-shaped, and hierarchical text forms. Uniform lookup keys are shuffled using a fixed seed, and a separate Zipfian workload models skewed popularity. Prefix result cardinality is controlled independently from total key count (1, 100, and 10,000 matches). A separate retained-memory diagnostic uses forced full collections and should be interpreted as an estimate, not an exact object-layout measurement.
+
+### Interpretation rules
+
+- The old `Prefix` and `MissNear` numbers remain historical observations, not valid measurements of prefix enumeration or same-length misses.
+- The old TieredStringMap numbers were collected with a setup that did not guarantee a specific layer distribution.
+- New results from the revised harness should be recorded as a new benchmark iteration, with the exact commit, runtime, hardware, and BenchmarkDotNet job.
+- Use the default BenchmarkDotNet job for conclusions; short jobs are intended for rapid iteration only.
+- `MemoryDiagnoser` reports allocations performed during benchmark operations. It does not, by itself, measure the retained memory footprint of a populated data structure.
+
+No results from the revised harness are published yet. The next run will establish a new, controlled baseline.

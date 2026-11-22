@@ -40,6 +40,9 @@ for (int i = 0; i < 100_000; i++)
     if (i % 5000 == 0) map.Compact();
 }
 
+if (map.TryGetValue("\uD800".AsSpan(), out _))
+    throw new Exception("Malformed UTF-16 lookup in active-layer state unexpectedly matched a key.");
+
 map.Compact();
 var actualPairs = new List<KeyValuePair<string, int>>();
 map.ForEach((key, value) =>
@@ -63,4 +66,61 @@ foreach (string prefix in new[] { "", "a", "é", "中", "😀", "ab" })
     if (!actual.SequenceEqual(expected)) throw new Exception($"Prefix mismatch: {prefix}");
 }
 
-Console.WriteLine($"PASS — {oracle.Count:N0} entries, {map.BaseSizeInBytes:N0} base bytes");
+// Prefix enumeration must merge base entries with active-delta inserts, updates, and tombstones.
+var prefixDeltaMap = new TieredStringMap<int>(
+new[]
+{
+    new KeyValuePair<string, int>("a/1", 1),
+    new KeyValuePair<string, int>("a/3", 3),
+    new KeyValuePair<string, int>("b/1", 10)
+}, autoCompact: false);
+prefixDeltaMap.TryAdd("a/2", 2);
+prefixDeltaMap.Set("a/3", 33);
+prefixDeltaMap.Remove("a/1");
+prefixDeltaMap.Set("a/4", 4);
+var prefixDeltaResults = new List<KeyValuePair<string, int>>();
+prefixDeltaMap.ForEachWithPrefix("a/".AsSpan(), (key, value) =>
+{
+    prefixDeltaResults.Add(new(Encoding.UTF8.GetString(key), value));
+    return true;
+});
+var expectedPrefixDelta = new[]
+{
+    new KeyValuePair<string, int>("a/2", 2),
+    new KeyValuePair<string, int>("a/3", 33),
+    new KeyValuePair<string, int>("a/4", 4)
+};
+if (!prefixDeltaResults.SequenceEqual(expectedPrefixDelta))
+    throw new Exception("Prefix enumeration with active delta mismatch.");
+
+// Malformed UTF-16 lookup input must behave like an absent key, not throw.
+if (map.TryGetValue("\uD800".AsSpan(), out _))
+    throw new Exception("Malformed UTF-16 lookup unexpectedly matched a key.");
+
+// Concurrent writers are serialized internally; verify the resulting state after they finish.
+var concurrentMap = new TieredStringMap<int>(autoCompact: false);
+Parallel.For(0, 8, worker =>
+{
+    for (int i = 0; i < 5_000; i++)
+    {
+        string key = $"worker:{worker:D2}:item:{i:D5}";
+        if (!concurrentMap.TryAdd(key, i))
+            throw new Exception($"Concurrent insert unexpectedly failed: {key}");
+    }
+});
+
+Parallel.For(0, 8, worker =>
+{
+    for (int i = 0; i < 5_000; i++)
+    {
+        string key = $"worker:{worker:D2}:item:{i:D5}";
+        if (!concurrentMap.TryGetValue(key.AsSpan(), out int value) || value != i)
+            throw new Exception($"Concurrent lookup mismatch: {key}");
+    }
+});
+
+concurrentMap.Compact();
+if (concurrentMap.Count != 40_000)
+    throw new Exception("Concurrent map count mismatch.");
+
+Console.WriteLine($"PASS — {oracle.Count:N0} entries, {map.BaseSizeInBytes:N0} base bytes, 40,000 concurrent entries");

@@ -11,7 +11,7 @@ TieredStringMap combines an immutable packed base, a mutable active delta, immut
 - **Packed immutable base:** UTF-8 keys in one contiguous byte buffer; offset/length metadata; contiguous values; open-addressing hash index; sorted ordinal index for prefix scans.
 - **Active delta:** concurrent dictionary for inserts, updates, and tombstones.
 - **Sealed deltas:** immutable generations. Bloom filters are built only after a generation is frozen, so an in-progress write cannot create a Bloom-filter false negative.
-- **Compaction:** builds a replacement base from captured generations and atomically publishes it while retaining newer generations created during the build.
+- **Compaction:** builds a replacement base from captured generations and atomically publishes it while retaining newer generations created during the build. Automatic compaction starts after the active layer reaches the greater of the configured `compactThreshold` and 10% of the current base entry count, reducing repeated full-base rebuilds for large bases.
 - **UTF-8 lookup:** base-only lookup accepts ReadOnlySpan<byte> and avoids UTF-16 decoding.
 
 Mutations are serialized by a writer gate. Reads do not acquire that gate. This is not advertised as a formally lock-free data structure.
@@ -45,8 +45,8 @@ The visitor receives a span valid only during the callback. Copy it if it must o
 ## Semantics
 
 - Keys use ordinal, case-sensitive equality.
-- Keys must be valid UTF-16 strings; unpaired surrogates are rejected.
-- Malformed UTF-8 lookup input returns false.
+- Keys written to the map must be valid UTF-16 strings; unpaired surrogates are rejected.
+- Malformed UTF-16 lookup input returns false. Malformed UTF-8 lookup input returns false.
 - Prefix enumeration is ordered by lexicographic UTF-8 bytes, not culture-sensitive collation.
 - Set returns true if the key was absent immediately before the write. TryAdd never overwrites. Remove returns false for an absent key.
 - Mutations are serialized. Reads are gate-free and may overlap mutations. A read observes one published layer snapshot, but the active concurrent dictionary can change while the read executes. Enumeration is weakly consistent with concurrent writes.
@@ -138,9 +138,36 @@ Design influences: Wirth (simplicity), Sedgewick and Knuth (algorithmic analysis
 
 ## Benchmarking
 
-A BenchmarkDotNet project is not included yet. Before making performance claims, add benchmarks comparing exact lookup and prefix enumeration against Dictionary, ConcurrentDictionary, FrozenDictionary, SortedDictionary, and (where relevant) a radix-tree implementation.
+The BenchmarkDotNet project is located in `benchmarks/AI.DataStructures.Benchmarks`.
 
-Use uniform and Zipfian key distributions, hit/miss ratios, several key lengths, prefix lengths, read/write ratios, and concurrent readers/writers. Record CPU, memory, OS, .NET runtime, GC mode, and BenchmarkDotNet version. No benchmark numbers are embedded here because none have been measured for this implementation.
+Run the complete benchmark suite in Release mode:
+
+~~~bash
+dotnet run -c Release --project benchmarks/AI.DataStructures.Benchmarks/AI.DataStructures.Benchmarks.csproj
+~~~
+
+For a quicker development run:
+
+~~~bash
+dotnet run -c Release --project benchmarks/AI.DataStructures.Benchmarks/AI.DataStructures.Benchmarks.csproj -- --job short
+~~~
+
+Run the separate retained-memory estimate (200,000 representative URL-like keys):
+
+~~~bash
+dotnet run -c Release --project benchmarks/AI.DataStructures.Benchmarks/AI.DataStructures.Benchmarks.csproj -- --memory-report
+~~~
+
+The benchmark suite separates two different questions:
+
+- **Exact lookup:** compares `Dictionary`, `FrozenDictionary`, and `TieredStringMap` for hits and same-length misses. Query keys use URL-like, GUID-shaped, and hierarchical text formats. Uniform queries are shuffled with a fixed seed, and a separate Zipfian workload models skewed popularity. It also measures the UTF-8 lookup API separately.
+- **Prefix enumeration:** calls the actual `ForEachWithPrefix` API and compares it with full key scans in `Dictionary`, `FrozenDictionary`, `SortedDictionary`, and `SortedSet.GetViewBetween` range views. The number of matching keys is controlled independently from the total key count.
+
+TieredStringMap lookup benchmarks include both a **base-only** instance (constructed from initial entries with automatic compaction disabled) and a **base plus active delta** instance. Prefix benchmarks also include a base-plus-active-delta case. This avoids depending on the timing of background compaction during benchmark setup.
+
+Benchmark results are recorded in [RESULTS.md](RESULTS.md). Short jobs are useful for iteration but are not sufficient for strong performance claims. Use the default BenchmarkDotNet job for more reliable measurements, and record the hardware, OS, runtime, GC mode, and BenchmarkDotNet version alongside results.
+
+The current suite is a controlled starting point, not a complete workload model. Further work should add mixed read/write workloads, concurrent reader/writer benchmarks, sealed-layer scenarios, and more representative retained-memory profiling. The current retained-memory command is an approximate diagnostic based on forced full collections, not a precise object-layout measurement. Do not infer retained memory from the per-operation allocation column alone.
 
 ## Build and self-test
 
@@ -162,4 +189,4 @@ dotnet run -c Release --project tests/AI.DataStructures.SelfTest/AI.DataStructur
 
 ## License
 
-No license has been added. Do not assume redistribution rights until a license is explicitly selected.
+This project is distributed under the [MIT License](LICENSE).
