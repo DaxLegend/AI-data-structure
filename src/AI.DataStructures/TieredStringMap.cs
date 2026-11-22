@@ -254,19 +254,40 @@ public sealed class TieredStringMap<TValue> where TValue : unmanaged
     public bool TryGetValue(ReadOnlySpan<char> key, out TValue value)
     {
         Snapshot snapshot = Volatile.Read(ref _snapshot);
+        int maxByteCount = StrictUtf8.GetMaxByteCount(key.Length);
+
         try
         {
-            if (TryGetFromLayers(snapshot, key, out Entry entry))
+            if (maxByteCount <= 256)
             {
-                value = entry.Value;
-                return !entry.Deleted;
+                Span<byte> utf8 = stackalloc byte[maxByteCount];
+                int written = StrictUtf8.GetBytes(key, utf8);
+                ReadOnlySpan<byte> encodedKey = utf8[..written];
+                if (TryGetFromLayers(snapshot, key, encodedKey, out Entry entry))
+                {
+                    value = entry.Value;
+                    return !entry.Deleted;
+                }
+                return snapshot.Base.TryGetValue(encodedKey, out value);
             }
-            return snapshot.Base.TryGetValue(key, out value);
+
+            byte[] rented = ArrayPool<byte>.Shared.Rent(maxByteCount);
+            try
+            {
+                int written = StrictUtf8.GetBytes(key, rented);
+                ReadOnlySpan<byte> encodedKey = rented.AsSpan(0, written);
+                if (TryGetFromLayers(snapshot, key, encodedKey, out Entry entry))
+                {
+                    value = entry.Value;
+                    return !entry.Deleted;
+                }
+                return snapshot.Base.TryGetValue(encodedKey, out value);
+            }
+            finally { ArrayPool<byte>.Shared.Return(rented); }
         }
         catch (EncoderFallbackException)
         {
-            // Match dictionary-style lookup behavior for malformed UTF-16:
-            // invalid lookup input cannot match a valid stored key.
+            // Invalid UTF-16 cannot match any valid key stored in the map.
             value = default;
             return false;
         }
@@ -290,6 +311,25 @@ public sealed class TieredStringMap<TValue> where TValue : unmanaged
         if (TryLayer(snapshot.Active, key, out entry)) return true;
         for (int i = snapshot.Sealed.Length - 1; i >= 0; i--)
             if (TryLayer(snapshot.Sealed[i], key, out entry)) return true;
+        entry = default;
+        return false;
+    }
+
+    private static bool TryGetFromLayers(Snapshot snapshot, ReadOnlySpan<char> key,
+        ReadOnlySpan<byte> utf8Key, out Entry entry)
+    {
+        if (snapshot.Active.Entries.GetAlternateLookup<ReadOnlySpan<char>>()
+            .TryGetValue(key, out entry))
+            return true;
+
+        for (int i = snapshot.Sealed.Length - 1; i >= 0; i--)
+        {
+            Layer layer = snapshot.Sealed[i];
+            if (layer.MayContainUtf8(utf8Key) &&
+                layer.Entries.GetAlternateLookup<ReadOnlySpan<char>>().TryGetValue(key, out entry))
+                return true;
+        }
+
         entry = default;
         return false;
     }
