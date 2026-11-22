@@ -274,6 +274,12 @@ public static class Program
 {
     public static void Main(string[] args)
     {
+        if (args.Length == 1 && args[0] == "--memory-report")
+        {
+            MemoryFootprintReport.Run();
+            return;
+        }
+
         BenchmarkSwitcher.FromAssembly(typeof(StringMapBenchmarks).Assembly).Run(args);
     }
 }
