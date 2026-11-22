@@ -322,6 +322,7 @@ public class PrefixScanBenchmarks
     private Dictionary<string, int> _dictionary = new(StringComparer.Ordinal);
     private FrozenDictionary<string, int> _frozenDictionary = null!;
     private SortedDictionary<string, int> _sortedDictionary = new(StringComparer.Ordinal);
+    private SortedSet<string> _sortedSet = new(StringComparer.Ordinal);
     private TieredStringMap<int> _tieredStringMap = null!;
     private TieredStringMap<int> _tieredStringMapWithDelta = null!;
 
@@ -348,6 +349,7 @@ public class PrefixScanBenchmarks
             var pair = new KeyValuePair<string, int>(key, value);
             _dictionary.Add(key, value);
             _sortedDictionary.Add(key, value);
+            _sortedSet.Add(key);
             initial[i] = pair;
             if ((i & 1) == 0) baseEntries.Add(pair);
             else deltaEntries.Add(pair);
@@ -393,6 +395,32 @@ public class PrefixScanBenchmarks
             if (key.StartsWith(_prefix, StringComparison.Ordinal))
                 count++;
         return count;
+    }
+
+    [Benchmark]
+    public int SortedSet_PrefixRange()
+    {
+        string upperBound = GetPrefixUpperBound(_prefix) ?? string.MaxValue;
+        int count = 0;
+        foreach (string key in _sortedSet.GetViewBetween(_prefix, upperBound))
+            if (key.StartsWith(_prefix, StringComparison.Ordinal))
+                count++;
+        return count;
+    }
+
+    private static string? GetPrefixUpperBound(string prefix)
+    {
+        char[] chars = prefix.ToCharArray();
+        for (int i = chars.Length - 1; i >= 0; i--)
+        {
+            if (chars[i] == char.MaxValue)
+                continue;
+
+            chars[i]++;
+            return new string(chars, 0, i + 1);
+        }
+
+        return null;
     }
 
     [Benchmark]
