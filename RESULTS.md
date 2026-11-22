@@ -111,9 +111,9 @@ The first optimization pass focused on reducing the overhead of UTF-8 conversion
 
 *Ratio is relative to Dictionary for the corresponding key count and scenario. Lower values indicate better performance.*
 
-### Comparison with the initial baseline
+### Historical comparison with the initial baseline (not controlled)
 
-The following table compares the TieredStringMap results before and after the first optimization pass.
+The following table preserves the previously observed means before and after the first optimization pass. It is included for traceability only: both runs used a setup in which automatic compaction could overlap population, so the internal layer distribution was not controlled.
 
 | Scenario | Initial | Optimized | Improvement |
 |---|---:|---:|---:|
@@ -126,7 +126,7 @@ The following table compares the TieredStringMap results before and after the fi
 
 ### Analysis
 
-The first optimization pass produced measurable improvements across all tested scenarios, with gains ranging from 7.2% to 22.9%.
+The later run reported lower mean times in all six scenarios (7.2% to 22.9%). However, because the setup did not guarantee the same layer distribution and the short job used only three iterations, these differences are directional observations—not controlled evidence that the code changes caused the improvements.
 
 However, TieredStringMap is still slower than the standard dictionary implementations in every tested scenario:
 
@@ -134,7 +134,7 @@ However, TieredStringMap is still slower than the standard dictionary implementa
 - Miss lookups are approximately 2.9x slower than Dictionary.
 - Prefix operations are approximately 3.1x slower than Dictionary and significantly slower than FrozenDictionary.
 
-The current results therefore confirm that the optimizations reduced overhead, but do not yet demonstrate a performance advantage over existing alternatives.
+The historical results are consistent with reduced overhead, but do not establish causation and do not demonstrate a performance advantage over existing alternatives.
 
 ### Limitations
 
