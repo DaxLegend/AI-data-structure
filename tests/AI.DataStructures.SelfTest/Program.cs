@@ -63,6 +63,32 @@ foreach (string prefix in new[] { "", "a", "é", "中", "😀", "ab" })
     if (!actual.SequenceEqual(expected)) throw new Exception($"Prefix mismatch: {prefix}");
 }
 
+// Prefix enumeration must merge base entries with active-delta inserts, updates, and tombstones.
+var prefixDeltaMap = new TieredStringMap<int>(
+[
+    new KeyValuePair<string, int>("a/1", 1),
+    new KeyValuePair<string, int>("a/3", 3),
+    new KeyValuePair<string, int>("b/1", 10)
+], autoCompact: false);
+prefixDeltaMap.TryAdd("a/2", 2);
+prefixDeltaMap.Set("a/3", 33);
+prefixDeltaMap.Remove("a/1");
+prefixDeltaMap.Set("a/4", 4);
+var prefixDeltaResults = new List<KeyValuePair<string, int>>();
+prefixDeltaMap.ForEachWithPrefix("a/".AsSpan(), (key, value) =>
+{
+    prefixDeltaResults.Add(new(Encoding.UTF8.GetString(key), value));
+    return true;
+});
+var expectedPrefixDelta = new[]
+{
+    new KeyValuePair<string, int>("a/2", 2),
+    new KeyValuePair<string, int>("a/3", 33),
+    new KeyValuePair<string, int>("a/4", 4)
+};
+if (!prefixDeltaResults.SequenceEqual(expectedPrefixDelta))
+    throw new Exception("Prefix enumeration with active delta mismatch.");
+
 // Malformed UTF-16 lookup input must behave like an absent key, not throw.
 if (map.TryGetValue("\uD800".AsSpan(), out _))
     throw new Exception("Malformed UTF-16 lookup unexpectedly matched a key.");
