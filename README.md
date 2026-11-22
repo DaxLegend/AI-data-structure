@@ -11,7 +11,7 @@ TieredStringMap combines an immutable packed base, a mutable active delta, immut
 - **Packed immutable base:** UTF-8 keys in one contiguous byte buffer; offset/length metadata; contiguous values; open-addressing hash index; sorted ordinal index for prefix scans.
 - **Active delta:** concurrent dictionary for inserts, updates, and tombstones.
 - **Sealed deltas:** immutable generations. Bloom filters are built only after a generation is frozen, so an in-progress write cannot create a Bloom-filter false negative.
-- **Compaction:** builds a replacement base from captured generations and atomically publishes it while retaining newer generations created during the build.
+- **Compaction:** builds a replacement base from captured generations and atomically publishes it while retaining newer generations created during the build. Automatic compaction starts after the active layer reaches the greater of the configured `compactThreshold` and 10% of the current base entry count, reducing repeated full-base rebuilds for large bases.
 - **UTF-8 lookup:** base-only lookup accepts ReadOnlySpan<byte> and avoids UTF-16 decoding.
 
 Mutations are serialized by a writer gate. Reads do not acquire that gate. This is not advertised as a formally lock-free data structure.
