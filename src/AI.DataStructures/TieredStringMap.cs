@@ -51,12 +51,20 @@ public sealed class TieredStringMap<TValue> where TValue : unmanaged
         public bool MayContain(ReadOnlySpan<char> key)
         {
             if (!IsSealed || _bloom is null) return true;
+
             int max = StrictUtf8.GetMaxByteCount(key.Length);
+            if (max <= 256)
+            {
+                Span<byte> buffer = stackalloc byte[max];
+                int written = StrictUtf8.GetBytes(key, buffer);
+                return BloomMayContain(_bloom, HashBytes(buffer[..written]));
+            }
+
             byte[] rented = ArrayPool<byte>.Shared.Rent(max);
             try
             {
-                int n = StrictUtf8.GetBytes(key, rented);
-                return BloomMayContain(_bloom, HashBytes(rented.AsSpan(0, n)));
+                int written = StrictUtf8.GetBytes(key, rented);
+                return BloomMayContain(_bloom, HashBytes(rented.AsSpan(0, written)));
             }
             finally { ArrayPool<byte>.Shared.Return(rented); }
         }
@@ -170,11 +178,18 @@ public sealed class TieredStringMap<TValue> where TValue : unmanaged
         public bool TryGetValue(ReadOnlySpan<char> key, out TValue value)
         {
             int max = StrictUtf8.GetMaxByteCount(key.Length);
+            if (max <= 256)
+            {
+                Span<byte> buffer = stackalloc byte[max];
+                int written = StrictUtf8.GetBytes(key, buffer);
+                return TryGetValue(buffer[..written], out value);
+            }
+
             byte[] rented = ArrayPool<byte>.Shared.Rent(max);
             try
             {
-                int n = StrictUtf8.GetBytes(key, rented);
-                return TryGetValue(rented.AsSpan(0, n), out value);
+                int written = StrictUtf8.GetBytes(key, rented);
+                return TryGetValue(rented.AsSpan(0, written), out value);
             }
             finally { ArrayPool<byte>.Shared.Return(rented); }
         }
@@ -443,8 +458,11 @@ public sealed class TieredStringMap<TValue> where TValue : unmanaged
         ArgumentNullException.ThrowIfNull(visitor);
         Snapshot s = Volatile.Read(ref _snapshot);
         var overrides = new Dictionary<string, Entry>(StringComparer.Ordinal);
-        CollectLayer(s.Sealed, prefix, overrides);
-        CollectOneLayer(s.Active, prefix, overrides);
+        // Decode the prefix once. Checking UTF-16 strings avoids encoding every delta key;
+        // only matching keys need UTF-8 materialization for the ordered merge.
+        string prefixText = StrictUtf8.GetString(prefix);
+        CollectLayer(s.Sealed, prefixText.AsSpan(), overrides);
+        CollectOneLayer(s.Active, prefixText.AsSpan(), overrides);
 
         var sorted = new List<(byte[] Key, Entry Entry)>(overrides.Count);
         foreach (var pair in overrides)
@@ -483,19 +501,19 @@ public sealed class TieredStringMap<TValue> where TValue : unmanaged
         return emitted;
     }
 
-    private static void CollectLayer(IEnumerable<Layer> layers, ReadOnlySpan<byte> prefix,
+    private static void CollectLayer(IEnumerable<Layer> layers, ReadOnlySpan<char> prefix,
         Dictionary<string, Entry> destination)
     {
         foreach (Layer layer in layers) CollectOneLayer(layer, prefix, destination);
     }
 
-    private static void CollectOneLayer(Layer layer, ReadOnlySpan<byte> prefix,
+    private static void CollectOneLayer(Layer layer, ReadOnlySpan<char> prefix,
         Dictionary<string, Entry> destination)
     {
         foreach (var pair in layer.Entries)
         {
-            byte[] key = StrictUtf8.GetBytes(pair.Key);
-            if (key.AsSpan().StartsWith(prefix)) destination[pair.Key] = pair.Value;
+            if (pair.Key.AsSpan().StartsWith(prefix, StringComparison.Ordinal))
+                destination[pair.Key] = pair.Value;
         }
     }
 
