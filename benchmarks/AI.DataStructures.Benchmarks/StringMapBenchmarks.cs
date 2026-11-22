@@ -190,7 +190,7 @@ public class StringMapBenchmarks
         for (int i = 0; i < count; i++)
         {
             string id = i.ToString("D8", CultureInfo.InvariantCulture);
-            keys[i] = i % 3 switch
+            keys[i] = (i % 3) switch
             {
                 0 => $"https://api.example.test/v1/customers/{id}",
                 1 => $"customer:{i:D8}-0000-0000-0000-{i:D12}",
