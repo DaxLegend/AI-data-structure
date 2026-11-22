@@ -1,5 +1,6 @@
 using System.Collections.Frozen;
 using System.Globalization;
+using System.Text;
 using BenchmarkDotNet.Attributes;
 using BenchmarkDotNet.Running;
 using DataStructures;
@@ -20,6 +21,9 @@ public class StringMapBenchmarks
     private Dictionary<string, int> _dictionary = new(StringComparer.Ordinal);
     private FrozenDictionary<string, int> _frozenDictionary = null!;
     private TieredStringMap<int> _tieredStringMap = null!;
+    private TieredStringMap<int> _tieredStringMapWithDelta = null!;
+    private string[] _baseKeys = [];
+    private string[] _deltaKeys = [];
 
     [Params(10_000, 200_000)]
     public int KeyCount { get; set; }
@@ -44,8 +48,18 @@ public class StringMapBenchmarks
         _frozenDictionary = _dictionary.ToFrozenDictionary(StringComparer.Ordinal);
         _tieredStringMap = new TieredStringMap<int>(initial, autoCompact: false);
 
+        int baseCount = KeyCount / 2;
+        _baseKeys = _keys.Take(baseCount).ToArray();
+        _deltaKeys = _keys.Skip(baseCount).ToArray();
+        var baseEntries = initial.Take(baseCount).ToArray();
+        _tieredStringMapWithDelta = new TieredStringMap<int>(baseEntries, autoCompact: false);
+        foreach (var pair in initial.Skip(baseCount))
+            _tieredStringMapWithDelta.TryAdd(pair.Key, pair.Value);
+
         if (_tieredStringMap.PendingWrites != 0)
             throw new InvalidOperationException("The base-only benchmark must not contain active writes.");
+        if (_tieredStringMapWithDelta.PendingWrites != _deltaKeys.Length)
+            throw new InvalidOperationException("The base-plus-active-delta benchmark was not initialized as expected.");
     }
 
     [Benchmark(Baseline = true)]
@@ -84,6 +98,26 @@ public class StringMapBenchmarks
         int total = 0;
         foreach (byte[] key in _utf8Keys)
             if (_tieredStringMap.TryGetValueUtf8(key, out int value))
+                total += value;
+        return total;
+    }
+
+    [Benchmark]
+    public int TieredStringMap_HitBaseOnly()
+    {
+        int total = 0;
+        foreach (string key in _baseKeys)
+            if (_tieredStringMapWithDelta.TryGetValue(key.AsSpan(), out int value))
+                total += value;
+        return total;
+    }
+
+    [Benchmark]
+    public int TieredStringMap_HitActiveDelta()
+    {
+        int total = 0;
+        foreach (string key in _deltaKeys)
+            if (_tieredStringMapWithDelta.TryGetValue(key.AsSpan(), out int value))
                 total += value;
         return total;
     }
