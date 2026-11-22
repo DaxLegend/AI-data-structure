@@ -176,7 +176,7 @@ The revised harness separates the workloads:
 | Prefix scan – base only | Actual ordered `ForEachWithPrefix` enumeration, compared with scans over Dictionary, FrozenDictionary, and SortedDictionary |
 | Prefix scan – active delta | Actual prefix enumeration when matching keys are split between the immutable base and active delta |
 
-Lookup keys are shuffled using a fixed seed. Prefix result cardinality is controlled independently from total key count (1, 100, and 10,000 matches).
+Keys include URL-like, GUID-shaped, and hierarchical text forms. Uniform lookup keys are shuffled using a fixed seed, and a separate Zipfian workload models skewed popularity. Prefix result cardinality is controlled independently from total key count (1, 100, and 10,000 matches). A separate retained-memory diagnostic uses forced full collections and should be interpreted as an estimate, not an exact object-layout measurement.
 
 ### Interpretation rules
 
