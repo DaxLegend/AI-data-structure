@@ -45,8 +45,8 @@ The visitor receives a span valid only during the callback. Copy it if it must o
 ## Semantics
 
 - Keys use ordinal, case-sensitive equality.
-- Keys must be valid UTF-16 strings; unpaired surrogates are rejected.
-- Malformed UTF-8 lookup input returns false.
+- Keys written to the map must be valid UTF-16 strings; unpaired surrogates are rejected.
+- Malformed UTF-16 lookup input returns false. Malformed UTF-8 lookup input returns false.
 - Prefix enumeration is ordered by lexicographic UTF-8 bytes, not culture-sensitive collation.
 - Set returns true if the key was absent immediately before the write. TryAdd never overwrites. Remove returns false for an absent key.
 - Mutations are serialized. Reads are gate-free and may overlap mutations. A read observes one published layer snapshot, but the active concurrent dictionary can change while the read executes. Enumeration is weakly consistent with concurrent writes.
@@ -138,9 +138,30 @@ Design influences: Wirth (simplicity), Sedgewick and Knuth (algorithmic analysis
 
 ## Benchmarking
 
-A BenchmarkDotNet project is not included yet. Before making performance claims, add benchmarks comparing exact lookup and prefix enumeration against Dictionary, ConcurrentDictionary, FrozenDictionary, SortedDictionary, and (where relevant) a radix-tree implementation.
+The BenchmarkDotNet project is located in `benchmarks/AI.DataStructures.Benchmarks`.
 
-Use uniform and Zipfian key distributions, hit/miss ratios, several key lengths, prefix lengths, read/write ratios, and concurrent readers/writers. Record CPU, memory, OS, .NET runtime, GC mode, and BenchmarkDotNet version. No benchmark numbers are embedded here because none have been measured for this implementation.
+Run the complete benchmark suite in Release mode:
+
+~~~bash
+dotnet run -c Release --project benchmarks/AI.DataStructures.Benchmarks/AI.DataStructures.Benchmarks.csproj
+~~~
+
+For a quicker development run:
+
+~~~bash
+dotnet run -c Release --project benchmarks/AI.DataStructures.Benchmarks/AI.DataStructures.Benchmarks.csproj -- --job short
+~~~
+
+The benchmark suite separates two different questions:
+
+- **Exact lookup:** compares `Dictionary`, `FrozenDictionary`, and `TieredStringMap` for hits and same-length misses. Query keys are shuffled with a fixed seed so runs use a repeatable non-insertion order. It also measures the UTF-8 lookup API separately.
+- **Prefix enumeration:** calls the actual `ForEachWithPrefix` API and compares it with full key scans in `Dictionary`, `FrozenDictionary`, and `SortedDictionary`. The number of matching keys is controlled independently from the total key count.
+
+TieredStringMap lookup benchmarks include both a **base-only** instance (constructed from initial entries with automatic compaction disabled) and a **base plus active delta** instance. Prefix benchmarks also include a base-plus-active-delta case. This avoids depending on the timing of background compaction during benchmark setup.
+
+Benchmark results are recorded in [RESULTS.md](RESULTS.md). Short jobs are useful for iteration but are not sufficient for strong performance claims. Use the default BenchmarkDotNet job for more reliable measurements, and record the hardware, OS, runtime, GC mode, and BenchmarkDotNet version alongside results.
+
+The current suite is a controlled starting point, not a complete workload model. Further work should add Zipfian access distributions, realistic URL/GUID/text keys, mixed read/write workloads, concurrent readers and writers, sealed-layer scenarios, and retained-memory measurements. Do not infer retained memory from the per-operation allocation column alone.
 
 ## Build and self-test
 
