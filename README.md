@@ -140,6 +140,10 @@ Design influences: Wirth (simplicity), Sedgewick and Knuth (algorithmic analysis
 
 The BenchmarkDotNet project is located in `benchmarks/AI.DataStructures.Benchmarks`.
 
+Every BenchmarkDotNet run now mirrors the complete console output to a timestamped UTF-8 log file under `BenchmarkDotNet.Artifacts/console-logs/`, while continuing to display the output in the terminal. This preserves the detailed execution trace (including benchmark setup, warmup/actual iterations, diagnostics, and final summaries) even when terminal output is truncated or the session is closed. The log is created automatically; no redirection or extra command-line arguments are required. These generated artifacts are excluded from Git.
+
+BenchmarkDotNet also generates its normal structured reports (Markdown, CSV, and HTML) under `BenchmarkDotNet.Artifacts/results/`. Use those for comparing summary statistics, and the console log when the full execution trace is needed.
+
 Run the complete benchmark suite in Release mode:
 
 ~~~bash
