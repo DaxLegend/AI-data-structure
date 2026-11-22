@@ -17,6 +17,7 @@ public class StringMapBenchmarks
     private string[] _keys = [];
     private string[] _missingKeys = [];
     private byte[][] _utf8Keys = [];
+    private string[] _zipfQueries = [];
 
     private Dictionary<string, int> _dictionary = new(StringComparer.Ordinal);
     private FrozenDictionary<string, int> _frozenDictionary = null!;
@@ -36,6 +37,7 @@ public class StringMapBenchmarks
 
         _missingKeys = _keys.Select(static key => "x" + key[1..]).ToArray();
         _utf8Keys = _keys.Select(Encoding.UTF8.GetBytes).ToArray();
+        _zipfQueries = GenerateZipfianQueries(_keys, Math.Max(KeyCount, 100_000), seed: 4242);
 
         var initial = new KeyValuePair<string, int>[KeyCount];
         for (int i = 0; i < _keys.Length; i++)
@@ -123,6 +125,36 @@ public class StringMapBenchmarks
     }
 
     [Benchmark]
+    public int Dictionary_HitZipfian()
+    {
+        int total = 0;
+        foreach (string key in _zipfQueries)
+            if (_dictionary.TryGetValue(key, out int value))
+                total += value;
+        return total;
+    }
+
+    [Benchmark]
+    public int FrozenDictionary_HitZipfian()
+    {
+        int total = 0;
+        foreach (string key in _zipfQueries)
+            if (_frozenDictionary.TryGetValue(key, out int value))
+                total += value;
+        return total;
+    }
+
+    [Benchmark]
+    public int TieredStringMap_HitZipfian()
+    {
+        int total = 0;
+        foreach (string key in _zipfQueries)
+            if (_tieredStringMap.TryGetValue(key.AsSpan(), out int value))
+                total += value;
+        return total;
+    }
+
+    [Benchmark]
     public int Dictionary_MissSameLength()
     {
         int total = 0;
@@ -156,8 +188,40 @@ public class StringMapBenchmarks
     {
         var keys = new string[count];
         for (int i = 0; i < count; i++)
-            keys[i] = $"key:{i.ToString("D8", CultureInfo.InvariantCulture)}";
+        {
+            string id = i.ToString("D8", CultureInfo.InvariantCulture);
+            keys[i] = i % 3 switch
+            {
+                0 => $"https://api.example.test/v1/customers/{id}",
+                1 => $"customer:{i:D8}-0000-0000-0000-{i:D12}",
+                _ => $"tenant/{i % 97:D2}/orders/{id}/line-items"
+            };
+        }
         return keys;
+    }
+
+    private static string[] GenerateZipfianQueries(string[] keys, int queryCount, int seed)
+    {
+        const double exponent = 1.1;
+        var cumulative = new double[keys.Length];
+        double totalWeight = 0;
+        for (int i = 0; i < keys.Length; i++)
+        {
+            totalWeight += 1.0 / Math.Pow(i + 1, exponent);
+            cumulative[i] = totalWeight;
+        }
+
+        var random = new Random(seed);
+        var queries = new string[queryCount];
+        for (int i = 0; i < queries.Length; i++)
+        {
+            double sample = random.NextDouble() * totalWeight;
+            int index = Array.BinarySearch(cumulative, sample);
+            if (index < 0) index = ~index;
+            if (index >= keys.Length) index = keys.Length - 1;
+            queries[i] = keys[index];
+        }
+        return queries;
     }
 
     private static void Shuffle<T>(T[] items, int seed)
