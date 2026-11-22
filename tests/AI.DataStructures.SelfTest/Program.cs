@@ -4,6 +4,8 @@ using DataStructures;
 var map = new TieredStringMap<int>(compactThreshold: 32, autoCompact: false);
 var oracle = new SortedDictionary<string, int>(StringComparer.Ordinal);
 var random = new Random(17);
+var utf8Comparer = Comparer<string>.Create((a, b) =>
+    Encoding.UTF8.GetBytes(a).AsSpan().SequenceCompareTo(Encoding.UTF8.GetBytes(b)));
 string[] alphabet = ["a", "b", "c", "/", "é", "中", "😀"];
 
 for (int i = 0; i < 100_000; i++)
@@ -45,7 +47,8 @@ map.ForEach((key, value) =>
     actualPairs.Add(new(Encoding.UTF8.GetString(key), value));
     return true;
 });
-if (!actualPairs.SequenceEqual(oracle)) throw new Exception("Full enumeration mismatch");
+if (!actualPairs.SequenceEqual(oracle.OrderBy(x => x.Key, utf8Comparer)))
+    throw new Exception("Full enumeration mismatch");
 
 foreach (string prefix in new[] { "", "a", "é", "中", "😀", "ab" })
 {
@@ -55,7 +58,8 @@ foreach (string prefix in new[] { "", "a", "é", "中", "😀", "ab" })
         actual.Add(new(Encoding.UTF8.GetString(key), value));
         return true;
     });
-    var expected = oracle.Where(x => x.Key.StartsWith(prefix, StringComparison.Ordinal)).ToList();
+    var expected = oracle.Where(x => x.Key.StartsWith(prefix, StringComparison.Ordinal))
+        .OrderBy(x => x.Key, utf8Comparer).ToList();
     if (!actual.SequenceEqual(expected)) throw new Exception($"Prefix mismatch: {prefix}");
 }
 
