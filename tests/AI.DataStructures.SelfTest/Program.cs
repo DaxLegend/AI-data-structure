@@ -40,6 +40,9 @@ for (int i = 0; i < 100_000; i++)
     if (i % 5000 == 0) map.Compact();
 }
 
+if (map.TryGetValue("\uD800".AsSpan(), out _))
+    throw new Exception("Malformed UTF-16 lookup in active-layer state unexpectedly matched a key.");
+
 map.Compact();
 var actualPairs = new List<KeyValuePair<string, int>>();
 map.ForEach((key, value) =>
