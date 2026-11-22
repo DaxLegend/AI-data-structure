@@ -254,12 +254,22 @@ public sealed class TieredStringMap<TValue> where TValue : unmanaged
     public bool TryGetValue(ReadOnlySpan<char> key, out TValue value)
     {
         Snapshot snapshot = Volatile.Read(ref _snapshot);
-        if (TryGetFromLayers(snapshot, key, out Entry entry))
+        try
         {
-            value = entry.Value;
-            return !entry.Deleted;
+            if (TryGetFromLayers(snapshot, key, out Entry entry))
+            {
+                value = entry.Value;
+                return !entry.Deleted;
+            }
+            return snapshot.Base.TryGetValue(key, out value);
         }
-        return snapshot.Base.TryGetValue(key, out value);
+        catch (EncoderFallbackException)
+        {
+            // Match dictionary-style lookup behavior for malformed UTF-16:
+            // invalid lookup input cannot match a valid stored key.
+            value = default;
+            return false;
+        }
     }
 
     public bool ContainsKey(ReadOnlySpan<char> key) => TryGetValue(key, out _);
