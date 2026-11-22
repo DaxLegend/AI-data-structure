@@ -393,7 +393,7 @@ public sealed class TieredStringMap<TValue> where TValue : unmanaged
             added = !TryGetLive(s, key.AsSpan(), out _);
             s.Active.Add(key, new Entry(value, false));
             if (added) Interlocked.Increment(ref _count);
-            compact = ShouldCompact(s.Active);
+            compact = ShouldCompact(s);
         }
         if (compact) _ = CompactAsync();
         return added;
@@ -441,9 +441,13 @@ public sealed class TieredStringMap<TValue> where TValue : unmanaged
         return s.Base.TryGetValue(key, out value);
     }
 
-    private bool ShouldCompact(Layer active) =>
-        _autoCompact && Volatile.Read(ref active.Writes) >= _compactThreshold &&
-        Volatile.Read(ref _compacting) == 0;
+    private bool ShouldCompact(Snapshot snapshot)
+    {
+        int proportionalThreshold = Math.Max(_compactThreshold, snapshot.Base.Count / 10);
+        return _autoCompact &&
+            Volatile.Read(ref snapshot.Active.Writes) >= proportionalThreshold &&
+            Volatile.Read(ref _compacting) == 0;
+    }
 
     private static void ValidateKey(string key)
     {
